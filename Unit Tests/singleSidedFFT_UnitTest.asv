@@ -1,0 +1,25 @@
+clearvars;
+close all;
+
+Fs = 250e6;           % (Hz) Sampling frequency                    
+T = 1/Fs;             % (s) Sampling period       
+L = 1500;             % Length of signal
+t = ((0:L-1)*T)';     % (s) Time vector
+
+S = 0.7*sin(2*pi*50*t) + sin(2*pi*120*t); % 
+
+X = S + 2*randn(size(t));
+
+f1 = figure;
+plot(1000*t(1:50),X(1:50))
+title("Signal Corrupted with Zero-Mean Random Noise")
+xlabel("time (milliseconds)")
+ylabel("mV")
+
+[frequencyAxis, frequencyData] = singleSidedFFT(Fs*1e-6,X);
+
+f2 = figure;
+plot(frequencyAxis, frequencyData)
+title("Signal Corrupted with Zero-Mean Random Noise")
+xlabel("frequency (MHz)")
+ylabel("X(t)")
