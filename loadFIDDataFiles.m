@@ -12,10 +12,8 @@
 %               vector of 0-49, 50-99, etc.)
 % 
 
-function totalNumberOfAveragedFiles = loadFIDDataFiles(channelNumber, dataPath, timestampedDirectories, pulseNumber, useAveragedData, numberOfBinnedData)
-    if nargin <= 5 % If user does not specify a bin size
-        numberOfBinnedData = 1; % Default number of bins to 1 (so all files get averaged into one dataset)
-    end
+function [averagedData, numAvgVector] = loadFIDDataFiles(channelNumber, dataPath, timestampedDirectories, pulseNumber, useAveragedData)
+    
     if nargin == 4 % If user does not specify whether or not to use averaged data
         useAveragedData = true; % Default to using averaged data (if exists)
     end
