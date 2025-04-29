@@ -26,6 +26,7 @@ classdef LorentzianQuadratureFitter
     %%% Revisions: %%% 
     % 
     %%% Notes: %%%
+    % MATLAB git integration TEST
     % %%% MATLAB dependencies: %%%
     %%% Code written with MATLAB 2022a %%%
     % REQUIRED MATLAB TOOLBOXES: 
