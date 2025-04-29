@@ -1,0 +1,137 @@
+classdef LorentzianQuadratureFitter
+    %% EXAMPLE GENERIC CASPER HEADER FOR NEW SCRIPTS/FUNCTIONS (your title should replace this line)
+    %%% Brief description: %%%
+    % asdfsdfsdf
+    %%% Author: Andrew J. Winter, Boston University %%%
+    %%% Code originally written: 4/29/2025 %%%
+    %%% Inputs: %%%
+    % fitBoundsArray -- Struct containing .startPoint, .lowerBounds, .upperBounds
+    %%% Optional inputs: %%%
+    % multistartObj -- multistart object (created when calling MultiStart()
+    %                  function) sets multistart tolerances and 
+    %%% Outputs: %%%
+    % - (example) Magnetic flux in fT/sqrt(Hz) and filling factor (unitless) as a function of turn number
+    %%% Revisions: (GITHUB SHOULD TAKE CARE OF THIS BUT MAYBE GOOD PRACTICE TO KEEP TRACK HERE TOO) %%% 
+    % 
+    %%% Notes: %%%
+    % %%% MATLAB dependencies: %%%
+    %%% Code written with MATLAB 2022a %%%
+    % REQUIRED MATLAB TOOLBOXES: 
+    % - Symbolic Math (for legendreP function)
+    % SUGGESTED MATLAB TOOLBOXES:
+    % - Parallel Computing (for parfor loops, speeds up code significantly)
+
+    properties (GetAccess = public)
+        
+    end
+    
+    properties (GetAccess = public, SetAccess = private)
+        FitBoundsStruct = []; % Struct containing .startPoint, .lowerBounds, .upperBounds
+        MultistartObject = []; % Forcibly set in the constructor
+        OptimizationProblemStructure = []; % Forcibly set in the constructor
+        NumberOfMultistarts = 100; % Default to 100
+    end
+
+    methods
+        %% Class constructor
+        function obj = LorentzianQuadratureFitter(fitBoundsStruct, numberOfMultistarts, multistartObj, optimizationProblemStruct)
+            %NMRFitter Construct an instance of this class
+            %   Detailed explanation goes here
+            
+            numberOfInputArguments = nargin; % How many input variables did the user provide?
+            
+            %%% Input validation
+            % Check for proper number of input arguments
+            if numberOfInputArguments == 0
+                error("Not enough inputs provided to LorentzianQuadratureFitter: Need at least Lorentzian fit parameter start point, upper, and lower bounds.");
+            end
+
+            % Perform input validation on the fitBoundsStruct variable before assigning as a class property
+            try
+                verifyFitBoundsStruct(fitBoundsStruct);
+            catch
+                error("Provided fitBoundsStruct is not a valid input.")
+            end
+            FitBoundsStruct = fitBoundsStruct; % fitBoundsStruct is verified, assign as a class property
+
+            if numberOfInputArguments > 1
+                NumberOfMultistarts = numberOfMultistarts;
+            elseif numberOfInputArguments > 2
+                MultistartObject = multistartObj;
+            elseif numberOfInputArguments > 3
+                OptimizationProblemStructure = optimizationProblemStruct;
+            elseif numberOfInputArguments > 4
+                error("Too many inputs provided to LorentzianQuadratureFitter.")
+            end
+
+
+            % Assign defaults for unprovided inputs
+            if isempty(MultistartObject)
+                numberOfMultistarts = numberOfMultistarts;
+                multistartObj = MultiStart('PlotFcns',@gsplotbestf,'Display','final');
+                multistartObj.TolX = 1e-3;
+                multistartObj.TolFun = 1e-5;
+                if NumberOfMultistarts > 200
+                    multistartObj.UseParallel = true;
+                end
+            end
+            if isempty(OptimizationProblemStructure)
+                 % Default minimization optimization problem (well-suited for Lorentzian fitting)
+                optimizationProblemStruct = createOptimProblem('fmincon','x0',FitBoundsStruct(:,1),'objective',@objective,'lb',FitBoundsStruct(:,2),'ub',FitBoundsStruct(:,3));
+                optimizationProblemStruct.options.MaxIter = 5e3;
+                optimizationProblemStruct.options.MaxFunEvals = 2e4;
+                optimizationProblemStruct.options.TolX = 1e-3;
+                optimizationProblemStruct.options.TolFun = 1e-6;
+                optimizationProblemStruct.options.FinDiffRelStep = 1e-5;
+            end
+            
+            
+            %obj.Property1 = inputArg1 + inputArg2;
+        end
+        
+        % Set 
+        function setNumberOfMultistarts(obj, numberOfMultistarts)
+            %METHOD1 Summary of this method goes here
+            %   Detailed explanation goes here
+            obj = numberOfMultistarts;
+        end
+
+        function outputArg = method1(obj,inputArg)
+            %METHOD1 Summary of this method goes here
+            %   Detailed explanation goes here
+            outputArg = obj.Property1 + inputArg;
+        end
+    end
+
+    %% Private methods (like property-specific input validation)
+    methods (Access = private)
+
+        function verifyFitBoundsStruct(fitBoundsStruct)
+            % Check to make sure fitBoundsStruct is a structure not a matrix etc.
+            if string(class(fitBoundsStruct)) ~= "struct"
+                error("Provided fitbounds is not in the form of a struct.")
+            end
+            
+            % Check for proper struct fields
+            if ~isfield(fitBoundsStruct.startPoint)
+                error("Provided fitBoundsStruct is missing the .startPoint field.")
+            end
+            if ~isfield(fitBoundsStruct.lowerBounds)
+                error("Provided fitBoundsStruct is missing the .startPoint field.")
+            end
+            if ~isfield(fitBoundsStruct.upperBounds)
+                error("Provided fitBoundsStruct is missing the .startPoint field.")
+            end
+            
+            % Check that struct field lengths are identical
+            startPointFieldLength = length(fitBoundsStruct.startPoint);
+            lowerBoundsFieldLength = length(fitBoundsStruct.lowerBounds);
+            upperBoundsFieldLength = length(fitBoundsStruct.upperBounds);
+            tempLogicalVector = startPointFieldLength.*ones(3,1) == [startPointFieldLength; lowerBoundsFieldLength; upperBoundsFieldLength];
+            if sum(tempLogicalVector) ~= 3 % There should be three "logically true" values: one for each of the fit vectors
+                error("Vector lengths between the fields of the in the fitBoundsStruct are not equal.")
+            end
+
+        end
+    end
+end
