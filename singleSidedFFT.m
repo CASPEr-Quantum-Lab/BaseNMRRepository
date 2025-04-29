@@ -16,7 +16,7 @@
 % - voltageDataMatrix can be multiple sets of data, as long as its stored column-wise. This will
 %   perform faster than for-looping an FFT
 %%% MATLAB dependencies: %%%
-% Code written with MATLAB 2022b
+%%% Code written with MATLAB 2022b %%%
 
 function [frequencyAxis, singleSidedASD] = singleSidedFFT(samplingFrequency, voltageDataMatrix)
 %% Obtain single-sided Fourier data
