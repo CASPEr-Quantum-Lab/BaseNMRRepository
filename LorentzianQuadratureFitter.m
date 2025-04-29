@@ -26,7 +26,7 @@ classdef LorentzianQuadratureFitter
     %%% Revisions: %%% 
     % 
     %%% Notes: %%%
-    % MATLAB git integration TEST
+    % 
     % %%% MATLAB dependencies: %%%
     %%% Code written with MATLAB 2022a %%%
     % REQUIRED MATLAB TOOLBOXES: 
@@ -42,6 +42,8 @@ classdef LorentzianQuadratureFitter
         FitBoundsStruct = []; % Struct containing .startPoint, .lowerBounds, .upperBounds
         MultistartObject = []; % Forcibly set in the constructor
         OptimizationProblemStructure = []; % Forcibly set in the constructor
+        FrequencyAxis_MHz = []; % (MHz) Most-recently-used frequency axis with this  fit object (SHOULD STAY SET-ACCESS PRIVATE)
+        ASD_uVperRtHz = []; % (uV/sqrt(Hz)) Most-recently-used ASD with this fit object (SHOULD STAY SET-ACCESS PRIVATE)
     end
 
     methods
@@ -83,7 +85,7 @@ classdef LorentzianQuadratureFitter
             end
             
             if isempty(obj.OptimizationProblemStructure)
-                obj = obj.setOptimizationDefaults(fitBoundsStruct);
+                obj = obj.setOptimizationDefaults();
             end
             
         end
@@ -103,6 +105,18 @@ classdef LorentzianQuadratureFitter
             obj.FitBoundsStruct = newFitBoundsStruct;
         end
         
+        %%% ANDREW NOTE: IS THIS A GOOD TIME TO DO POLYMORPHISM?
+        function obj = fitLorentzian(obj, frequencyAxis_MHz, ASD_uVperRtHz)
+            %FITLORENTZIAN Take frequency data and fit to a single
+            %              Lorentzian with the fit properties of this class
+            obj.FrequencyAxis_MHz = frequencyAxis_MHz;
+            obj.ASD_uVperRtHz = ASD_uVperRtHz;
+
+            [bestFitParameters,residuals,~,~,sols] = run(obj.MultistartObject, obj.OptimizationProblemStructure, obj.NumberOfMultistarts);
+            % Can we estimate error with Hessian matrix?
+            
+        end
+
     end
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -152,7 +166,7 @@ classdef LorentzianQuadratureFitter
             obj.MultistartObject = multistartObj;
         end
 
-        function obj = setOptimizationDefaults(obj, FitBoundsStruct)
+        function obj = setOptimizationDefaults(obj)
             %SETOPTIMIZATIONDEFAULTS Default minimization optimization problem (well-suited for Lorentzian fitting)
             optimizationProblemStruct = createOptimProblem('fmincon','x0',obj.FitBoundsStruct.startPoint, ...
                 'objective',@objective,'lb',obj.FitBoundsStruct.lowerBounds,'ub',obj.FitBoundsStruct.upperBounds);
@@ -164,5 +178,23 @@ classdef LorentzianQuadratureFitter
             obj.OptimizationProblemStructure = optimizationProblemStruct;
         end
             
+        function fun = objective(p)
+            
+            amp = p(1);
+            g = p(2);
+            f0 = p(3);
+            ph = p(4);
+            offset_real = p(5);
+            offset_imag = p(6);
+        
+        
+            L_abs = (amp/sqrt(2*tD))*g/(2*pi)^2./((g/(2*pi)).^2+((f0-ff)).^2); % real part Lorentzian
+            L_disp = (amp/sqrt(2*tD))*(ff-f0)/(2*pi)./((g/(2*pi)).^2+((f0-ff)).^2); % Im part of Lorentzian
+            
+            fun = 1/length(ff)*double( sum(( real(Xdata) - ( cos(ph)*L_abs + sin(ph)*L_disp + offset_real ) ).^2 + ...
+                ( imag(Xdata) - ( sin(ph)*L_abs - cos(ph)*L_disp + offset_imag ) ).^2) ); % This is minimized
+
+        end
+
     end
 end
