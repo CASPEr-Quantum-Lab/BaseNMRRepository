@@ -1,6 +1,6 @@
 % Andrew's magical test / debug script (NOT a unit test... yet)
 
-% timestampedDirectories = ["19961008_0200_1", "19961008_0200_1"];
+% timestampedDirectories = ["19961008_0200_1", "19961008_0200_1"]; 
 % dataPath = ".\testData\FIDData\";
 timestampedDirectories = ["20220512_1928", "20220512_1932"];
 dataPath = "D:\Github\AJWBranch\BaseNMRRepository\testData\FIDData\";
