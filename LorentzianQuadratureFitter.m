@@ -23,27 +23,39 @@ classdef LorentzianQuadratureFitter
     %     advantage of, none of which are forcibly run (e.g. user can
     %     generate some different plots if they wish, but none of them will
     %     be forcibly run saving computation time)
+    %%% Properties: %%% (excluding inputs listed above)
+    % FrequencyAxis_MHz: The frequency axis (in MHz) for the most-recent
+    %       frequency-domain fit that was performed
+    % ASD_uVperRtHz: The amplitude spectral density of the FID (uV/sqrt(Hz))
+    %%% Public methods: %%% (excluding methods that set inputs/properties listed above)
+    % fitLorentzian(): Fits the provided frequency domain data to a
+    %       six-parameter Lorentzian - if real and imaginary offsets are zero,
+    %       these can be forced to zero in the provided fit parameters
     %%% Revisions: %%% 
     % 
     %%% Notes: %%%
     % 
     % %%% MATLAB dependencies: %%%
-    %%% Code written with MATLAB 2022a %%%
+    %%% Code written with MATLAB 2022b %%%
     % REQUIRED MATLAB TOOLBOXES: 
     % - Global Optimization (for seting up the non-linear optimization)
     % SUGGESTED MATLAB TOOLBOXES:
     % - Parallel Computing (for parfor loops, speeds up code significantly)
 
-    properties (GetAccess = public)
+    properties (Access = public)
         NumberOfMultistarts = []; % This will be defaulted to 100 in the constructor unless otherwise provided by the user
+        plotBandwidth_MHz = []; 
+        fitBandwidth_MHz = [];
     end
     
     properties (GetAccess = public, SetAccess = private)
         FitBoundsStruct = []; % Struct containing .startPoint, .lowerBounds, .upperBounds
         MultistartObject = []; % Forcibly set in the constructor
         OptimizationProblemStructure = []; % Forcibly set in the constructor
+        OptimizationFunction = []; % User-changeable optimization function (Lorentzian, double Lorentzian, Gaussian, etc.)
+        FourierWindowDuration = [] % (us) Full duration of the time-domain window in which the Fourier transform will be taken
         FrequencyAxis_MHz = []; % (MHz) Most-recently-used frequency axis with this  fit object (SHOULD STAY SET-ACCESS PRIVATE)
-        ASD_uVperRtHz = []; % (uV/sqrt(Hz)) Most-recently-used ASD with this fit object (SHOULD STAY SET-ACCESS PRIVATE)
+        ASDmatrix_uVperRtHz = []; % (uV/sqrt(Hz)) Most-recently-used ASD with this fit object (SHOULD STAY SET-ACCESS PRIVATE)
     end
 
     methods
@@ -85,7 +97,7 @@ classdef LorentzianQuadratureFitter
             end
             
             if isempty(obj.OptimizationProblemStructure)
-                obj = obj.setOptimizationDefaults();
+                obj = obj.setOptimizationSettings();
             end
             
         end
@@ -105,23 +117,37 @@ classdef LorentzianQuadratureFitter
             obj.FitBoundsStruct = newFitBoundsStruct;
         end
         
-        %%% ANDREW NOTE: IS THIS A GOOD TIME TO DO POLYMORPHISM?
-        function obj = fitLorentzian(obj, frequencyAxis_MHz, ASD_uVperRtHz)
+        %%% ANDREW NOTE: THIS IS GENERALIZED! JUST NEEDS EXTRA ARGUMENT FOR
+        %%% FIT TYPE
+        function obj = fitLorentzian(obj, fourierWindowDuration, frequencyAxis_MHz, ASD_uVperRtHz)
             %FITLORENTZIAN Take frequency data and fit to a single
             %              Lorentzian with the fit properties of this class
-            obj.FrequencyAxis_MHz = frequencyAxis_MHz;
-            obj.ASD_uVperRtHz = ASD_uVperRtHz;
-
+            
+            obj = obj.updateObjectPropertiesForFitting(fourierWindowDuration, frequencyAxis_MHz, ASD_uVperRtHz);
+                        %obj.NumberOfMultistarts = 1; % DEBUGGING
             [bestFitParameters,residuals,~,~,sols] = run(obj.MultistartObject, obj.OptimizationProblemStructure, obj.NumberOfMultistarts);
             % Can we estimate error with Hessian matrix?
-            
+        end
+
+        function obj = updateObjectPropertiesForFitting(obj, fourierWindowDuration, frequencyAxis_MHz, ASD_uVperRtHz)
+            if nargin < 4
+                if isempty(obj.FrequencyAxis_MHz) || isempty(obj.ASDmatrix_uVperRtHz) || isempty(obj.FourierWindowLength)
+                    error("LorentzianQuadratureFitter.fitLorentzian() function supplied insufficient number of inputs!")
+                end
+            else
+                obj.FourierWindowDuration = fourierWindowDuration;
+                obj.FrequencyAxis_MHz = frequencyAxis_MHz;
+                obj.ASDmatrix_uVperRtHz = ASD_uVperRtHz;
+            end
+
+            obj = obj.setOptimizationSettings();
         end
 
     end
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %% Private methods (like property-specific input validation) %%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% Private methods (like property-specific input validation or necessary background functions) %%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods (Access = private)
 
         function verifyFitBoundsStruct(obj, fitBoundsStruct)
@@ -166,8 +192,8 @@ classdef LorentzianQuadratureFitter
             obj.MultistartObject = multistartObj;
         end
 
-        function obj = setOptimizationDefaults(obj)
-            %SETOPTIMIZATIONDEFAULTS Default minimization optimization problem (well-suited for Lorentzian fitting)
+        function obj = setOptimizationSettings(obj, optimizationFunction)
+            %setOptimizationSettings Default minimization optimization problem (well-suited for Lorentzian fitting)
             optimizationProblemStruct = createOptimProblem('fmincon','x0',obj.FitBoundsStruct.startPoint, ...
                 'objective',@objective,'lb',obj.FitBoundsStruct.lowerBounds,'ub',obj.FitBoundsStruct.upperBounds);
             optimizationProblemStruct.options.MaxIter = 5e3;
@@ -176,24 +202,65 @@ classdef LorentzianQuadratureFitter
             optimizationProblemStruct.options.TolFun = 1e-6;
             optimizationProblemStruct.options.FinDiffRelStep = 1e-5;
             obj.OptimizationProblemStructure = optimizationProblemStruct;
+            if nargin < 2
+                obj.OptimizationFunction = @LorentzianQuadratureFitter.LorentzianOptimizationFunction;
+            else
+                obj.OptimizationFunction = optimizationFunction;
+            end
+            function fun = objective(fitParams)
+                fprintf("test")
+                %amp = p(1); gamma = p(2); f0 = p(3); phi = p(4); offset_real = p(5); offset_imag = p(6);
+                
+                %L_abs = (amp/sqrt(2*tD))*gamma/(2*pi)^2./((gamma/(2*pi)).^2+((f0-ff)).^2); % Real part Lorentzian
+                %L_disp = (amp/sqrt(2*tD))*(ff-f0)/(2*pi)./((gamma/(2*pi)).^2+((f0-ff)).^2); % Imag part of Lorentzian
+                %{
+                fun = optimizationFunction(obj.FrequencyAxis_MHz, obj.ASDmatrix_uVperRtHz, ...
+                                            obj.FourierWindowDuration, fitParams);
+                %}
+                
+                fun = LorentzianQuadratureFitter.LorentzianOptimizationFunction(obj.FrequencyAxis_MHz, ...
+                                            obj.ASDmatrix_uVperRtHz, obj.FourierWindowDuration, fitParams);
+                %}
+                %1/length(ff)*double( sum(( real(Xdata) - ( cos(phi)*L_abs + sin(phi)*L_disp + offset_real ) ).^2 + ...
+                %    ( imag(Xdata) - ( sin(phi)*L_abs - cos(phi)*L_disp + offset_imag ) ).^2) ); % This is minimized
+            end
         end
-            
-        function fun = objective(p)
-            
-            amp = p(1);
-            g = p(2);
-            f0 = p(3);
-            ph = p(4);
-            offset_real = p(5);
-            offset_imag = p(6);
-        
-        
-            L_abs = (amp/sqrt(2*tD))*g/(2*pi)^2./((g/(2*pi)).^2+((f0-ff)).^2); % real part Lorentzian
-            L_disp = (amp/sqrt(2*tD))*(ff-f0)/(2*pi)./((g/(2*pi)).^2+((f0-ff)).^2); % Im part of Lorentzian
-            
-            fun = 1/length(ff)*double( sum(( real(Xdata) - ( cos(ph)*L_abs + sin(ph)*L_disp + offset_real ) ).^2 + ...
-                ( imag(Xdata) - ( sin(ph)*L_abs - cos(ph)*L_disp + offset_imag ) ).^2) ); % This is minimized
 
+        function fun = objectiveFunction(fitParams)
+            fprintf("test")
+            %amp = p(1); gamma = p(2); f0 = p(3); phi = p(4); offset_real = p(5); offset_imag = p(6);
+            
+            %L_abs = (amp/sqrt(2*tD))*gamma/(2*pi)^2./((gamma/(2*pi)).^2+((f0-ff)).^2); % Real part Lorentzian
+            %L_disp = (amp/sqrt(2*tD))*(ff-f0)/(2*pi)./((gamma/(2*pi)).^2+((f0-ff)).^2); % Imag part of Lorentzian
+            
+            fun = LorentzianQuadratureFitter.LorentzianOptimizationFunction(obj.FrequencyAxis_MHz, obj.ASD_uVperRtHz, obj.FourierWindowLength, fitParams);
+            %1/length(ff)*double( sum(( real(Xdata) - ( cos(phi)*L_abs + sin(phi)*L_disp + offset_real ) ).^2 + ...
+            %    ( imag(Xdata) - ( sin(phi)*L_abs - cos(phi)*L_disp + offset_imag ) ).^2) ); % This is minimized
+        end
+
+    end
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% FITTER TYPES (e.g. Lorentzian, double Lorentzian, Gaussian, etc.) %%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    methods (Static)
+        
+        function optimizationParameter = LorentzianOptimizationFunction(frequencyAxis, dataASD, fourierWindowLength, fitParameters)
+            dataLength = length(dataASD);
+            amplitude = fitParameters(1); gammaLinewidth = fitParameters(2);
+            centerFrequency = fitParameters(3); phase = fitParameters(4);
+            realOffset = fitParameters(5); imagOffset = fitParameters(6);
+
+            realLorentzian = (amplitude/sqrt(2*fourierWindowLength))*gammaLinewidth/(2*pi)^2./((gammaLinewidth/(2*pi)).^2 ...
+                            +((centerFrequency-frequencyAxis)).^2); % Real part Lorentzian
+            imagLorentzian = (amplitude/sqrt(2*fourierWindowLength))*(frequencyAxis-centerFrequency)/(2*pi)./((gammaLinewidth/(2*pi)).^2 ...
+                            + ((centerFrequency-frequencyAxis)).^2); % Imag part of Lorentzian
+            
+            optimizationParameter = 1/length(dataLength)*double( sum( ... % This is the value that is sought to be minimized
+                ( real(dataASD) - ( cos(phase)*realLorentzian + sin(phase)*imagLorentzian + realOffset ) ).^2 + ...
+                ( imag(dataASD) - ( sin(phase)*realLorentzian - cos(phase)*imagLorentzian + imagOffset ) ).^2) ...
+                                                                    );
         end
 
     end

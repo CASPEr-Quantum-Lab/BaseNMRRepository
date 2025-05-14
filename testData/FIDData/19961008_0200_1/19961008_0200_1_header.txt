@@ -1,0 +1,10 @@
+Magnet current: *3.6547 A*
+SQUID settings: *Rf = 7 kOhm*, *GBP = 7.2 GHz*; input termination @FLL = *On*; Out Coupling = *AC*;
+AWG AO0 4500-4700 kHz, 2500 mV, 0 rad, 4 us cos^2 mod -> Transformer 2:10 -> Sim x4 -> Shared Excitation
+AWG AO1 4500-4700 kHz, 2500 mV, 2.7925 rad, 4 us cos^2 mod -> Transformer 2:10 -> Sim x4 -> Central Excitation
+3 Linear Sweeps
+AWG AO2 4500-4700 kHz, DC offset = -2000 mV -> Sim x4 -> Int. Reset; FLL @ PULSE END
+AWG AO3 4500-4700 kHz, 0 mV 4000 kHz calib signal -> Sim x4 -> Central probe calibration
+Pickup probe -> SQUIDs 1&2 -> Digitizer
+1000 averages, 2.2 ms  rep time, 2.1 ms meas dur, 40 us pulse dur
+F:\20220512_1928

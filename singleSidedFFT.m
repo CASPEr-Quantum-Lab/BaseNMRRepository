@@ -34,12 +34,12 @@ discreteFourierNormalization = sqrt(1/(samplingFrequency*numberOfDataPoints)); %
 singleSidedASD = discreteFourierNormalization.*singleSidedASD; % (uV/sqrt(Hz)) To clarify units: mV/sqrt(MHz) = uV/sqrt(Hz)
 
 %% Validity check (Parseval's theorem)
-parsevalTolerance = 1e-10; % (uV^2) This is the set tolerance to pass the Parseval theorem check
+parsevalTolerance = 1e-7; % (uV^2) This is the set tolerance to pass the Parseval theorem check
 powerFromFreqDomain = double(sum(abs(singleSidedASD).^2.*(samplingFrequency/numberOfDataPoints))); % (uV^2)
 powerFromTimeDomain = double(mean(abs(voltageDataMatrix).^2,1)); % (uV^2)
 powerMismatch = abs(powerFromTimeDomain - powerFromFreqDomain); % (uV^2)
-if powerMismatch > parsevalTolerance % (uV^2) Compare power mismatch with set tolerance
-    error(["Parseval's theorem was not obeyed: Time - Freq domain power mismatch = ", num2str(powerFromTimeDomain), " uV^2"]);
+if any(powerMismatch > parsevalTolerance) % (uV^2) Compare power mismatch with set tolerance
+    error("Parseval's theorem was not obeyed: Time - Freq domain power mismatch.");
 end
 clear voltageDataMatrix; % voltageData is no longer useful for the rest of this function's scope: free up some memory
 

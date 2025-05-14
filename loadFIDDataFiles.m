@@ -1,16 +1,37 @@
-%% PREVIOUSLY KNOWN AS LoadDataFiles.m 
-%% Details:
-%% This code loads FID datafiles (collected as single precision data from FID MODE in the GUI, NOT AXION MODE which uses int16)
-%% v1.0: baseline version. Currently have to manually switch between *_avg.bin and regular .bin FID data types
-
-%% Need:
-% channelNumber (scalar)
-% timestampedDirectories (vector of directories) <-- these contain all the pulse measurements
-% dataPath (character array) <-- path to the directory containing data "timestampedDirectories" directories
-% measurementNumber (scalar) <-- specific data file idx, particularly
-%               useful in binning (i.e. bins of 50 will properly count as
-%               vector of 0-49, 50-99, etc.)
+%% loadFIDDataFiles
+%%% Brief description: %%%
+% Function that, given a directory path, will use the metadata in a/the
+%       provided directory(ies) and load + convert the raw binary data files
+%       from FID experiments into mV datapoints
+%%% Author: Andrew J. Winter, Boston University %%%
+%%% Code originally written: 4/29/2025 %%%
+%%% Inputs: %%%
+% channelNumber: The base-1 channel number of the data from the digitizer
+%       to be loaded (e.g. 1, 2, 3, or 4)
+% dataPath: The base path leading up to, but EXCLUDING the timestamped
+%       datadirectories (e.g. "F:\FIDData\")
+% timestampedDirectories: A list of timestamped data directories
+%       (e.g. ["20220512_1928", "20220512_1932"])
+% pulseNumber: In an FID experiment with more than one measurement, this
+%       designates which measurement number (i.e. .bin files are listed
+%       similar to 0_000001.bin, 0_000002.bin, ...,
+%       0_0000NN.bin, ..., 0_NNNNNN.bin. Ignoring the leading zeros, the
+%       last number is the "pulseNumber" or measurement number.)
+%       ***(e.g. 0_000193.bin corresponds to pulseNumber = 193)***
+% useAveragedData: (true/false) Use averaged data if it exists
+%       (It will check if avgd_data.mat exists, and if not, will go through
+%       the number of binary files the user originally chose)
+%%% Outputs: %%%
+% - averagedData: (mV) The averaged time domain data of the FID signal
+% - numAvgVector: Vector containing the number of files that were averaged,
+%       in same order as the list of the timestampedDirectories vector, per
+%       directory (this is useful for running average calculations)
+%%% Revisions: %%% 
 % 
+%%% Notes: %%%
+% 
+% %%% MATLAB dependencies: %%%
+%%% Code written with MATLAB 2022b %%%
 
 function [averagedData, numAvgVector] = loadFIDDataFiles(channelNumber, dataPath, timestampedDirectories, pulseNumber, useAveragedData)
     
@@ -18,9 +39,9 @@ function [averagedData, numAvgVector] = loadFIDDataFiles(channelNumber, dataPath
         useAveragedData = true; % Default to using averaged data (if exists)
     end
 
-    metaVariablesToLoad = {'cardInfo.AI', 'segmentSize', 'Nsweep'};
+    metaVariablesToLoad = {"cardInfo", "Nsweep"};
     % Load metadata from first timestamped directory
-    load(strcat(dataPath, timestampedDirectories(1), "\metaFile.mat"), '-mat', metaVariablesToLoad);
+    load(strcat(dataPath, timestampedDirectories(1), "\metaFile.mat"), "-mat", metaVariablesToLoad{:});
     
     % Store the number of measurements per directory being averaged
     % together (allows for proper averaging of directories with mismatched
@@ -34,7 +55,7 @@ function [averagedData, numAvgVector] = loadFIDDataFiles(channelNumber, dataPath
         % Load the number of averaged files per directory/directory for
         % proper running average (in case of mis-matched directory lengths)
         fullpath = strcat(dataPath, timestampedDirectories(dirIdx));
-        load(strcat(fullpath, "\metaFile.mat"), '-mat', 'numAvg');
+        load(strcat(fullpath, "\metaFile.mat"), "-mat", "numAvg");
         
         numAvgVector(1,dirIdx) = numAvg; % Store this directories numAvg for later
         averageDataFilExists = exist(strcat(fullpath,'\',num2str(channelNumber-1,'%01.0f'),'_avgd','.bin'), 'file');
